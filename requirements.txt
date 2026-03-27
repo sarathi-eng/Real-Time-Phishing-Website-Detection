@@ -1,0 +1,9 @@
+pandas
+scikit-learn
+numpy
+fastapi
+uvicorn
+httpx
+beautifulsoup4
+tldextract
+cachetools
