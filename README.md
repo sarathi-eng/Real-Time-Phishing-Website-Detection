@@ -141,6 +141,7 @@ python scripts/evaluate_model.py \
   --data data/dataset.csv \
   --real-world-data data/real_world_eval.csv \
   --adversarial-data data/adversarial_eval.csv \
+  --augment-train-with-external \
   --test-size 0.2 \
   --random-state 42 \
   --cv-folds 5 \
@@ -184,6 +185,25 @@ The project now includes two additional unseen evaluation sets:
 - `difficulty_gap_vs_held_out` (metric deltas from held-out to harder sets)
 
 This makes it explicit when apparent held-out performance does not transfer to harder URL distributions.
+
+## Robustness Enhancements (No Architecture Change)
+
+The model architecture remains unchanged (RandomForest + calibration + hybrid decision layer), but feature quality and risk calibration are improved:
+
+- **Domain intelligence**
+  - domain entropy
+  - character-distribution anomaly score (digit/hyphen-heavy patterns)
+  - suspicious TLD signal (`.xyz`, `.top`, `.tk`, etc.)
+- **Typosquatting improvements**
+  - stronger visual similarity scoring
+  - enhanced homoglyph normalization
+- **Semantic/lexical context**
+  - weighted suspicious keyword score (not only binary keyword presence)
+- **Decision tuning**
+  - higher heuristic blend weight in uncertain cases
+  - composite lexical-risk guard to reduce phishing false negatives
+- **Evaluation/training loop**
+  - optional train-time augmentation from external harder sets (while preserving held-out split integrity)
 
 ## Testing
 

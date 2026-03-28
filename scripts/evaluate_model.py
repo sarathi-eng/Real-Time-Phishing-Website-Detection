@@ -64,6 +64,46 @@ def _prepare_external_dataset(data_path: str, train_urls: set[str], dataset_name
     }
 
 
+def _augment_training_set(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    train_urls: set[str],
+    real_world_data_path: str | None,
+    adversarial_data_path: str | None,
+) -> tuple[pd.DataFrame, pd.Series, dict]:
+    sources: list[tuple[str, str]] = []
+    if real_world_data_path:
+        sources.append(("real_world", real_world_data_path))
+    if adversarial_data_path:
+        sources.append(("adversarial", adversarial_data_path))
+
+    if not sources:
+        return X_train, y_train, {"enabled": False}
+
+    frames = []
+    labels = []
+    added_samples = 0
+    source_stats = {}
+    for name, source_path in sources:
+        external = _prepare_dataset(source_path)
+        unseen = external.loc[~external["url"].isin(train_urls)].reset_index(drop=True)
+        if unseen.empty:
+            source_stats[name] = {"added_samples": 0}
+            continue
+        source_stats[name] = {"added_samples": int(len(unseen))}
+        ext_features = _extract_features(unseen["url"].tolist())
+        frames.append(ext_features)
+        labels.append(unseen["label"])
+        added_samples += len(unseen)
+
+    if not frames:
+        return X_train, y_train, {"enabled": True, "added_samples": 0, "sources": source_stats}
+
+    X_aug = pd.concat([X_train] + frames, ignore_index=True)
+    y_aug = pd.concat([y_train.reset_index(drop=True)] + [lbl.reset_index(drop=True) for lbl in labels], ignore_index=True)
+    return X_aug, y_aug, {"enabled": True, "added_samples": int(added_samples), "sources": source_stats}
+
+
 def _extract_features(urls: list[str]) -> pd.DataFrame:
     features = feature_assembler.assemble_batch(urls)
     forbidden_columns = {"label", "target", "ground_truth", "is_phishing", "y"}
@@ -125,6 +165,7 @@ def evaluate(
     cv_folds: int = 5,
     real_world_data_path: str | None = None,
     adversarial_data_path: str | None = None,
+    augment_train_with_external: bool = False,
 ) -> dict:
     dataset = _prepare_dataset(data_path)
     features = _extract_features(dataset["url"].tolist())
@@ -145,7 +186,17 @@ def evaluate(
         raise RuntimeError(f"Data leakage detected: {len(overlap)} URLs overlap between train and test splits.")
 
     model = PhishingModel()
-    model.train(X_train, y_train)
+    train_features, train_labels = X_train, y_train
+    augmentation_report = {"enabled": False}
+    if augment_train_with_external:
+        train_features, train_labels, augmentation_report = _augment_training_set(
+            X_train=X_train,
+            y_train=y_train,
+            train_urls=train_urls,
+            real_world_data_path=real_world_data_path,
+            adversarial_data_path=adversarial_data_path,
+        )
+    model.train(train_features, train_labels)
     predictions = model.predict(X_test)
 
     prediction_distribution = pd.Series(predictions).value_counts().to_dict()
@@ -169,12 +220,14 @@ def evaluate(
             "samples_total": int(len(dataset)),
             "samples_train": int(len(y_train)),
             "samples_test": int(len(y_test)),
+            "samples_train_effective": int(len(train_labels)),
         },
         "leakage_guards": {
             "dropped_duplicate_urls": True,
             "conflicting_duplicate_labels_blocked": True,
             "label_derived_features_blocked": True,
         },
+        "training_augmentation": augmentation_report,
     }
 
     train_url_set = set(dataset.loc[X_train.index, "url"])
@@ -246,6 +299,11 @@ def main() -> None:
         help="Skip external real-world/adversarial evaluation layers",
     )
     parser.add_argument(
+        "--augment-train-with-external",
+        action="store_true",
+        help="Augment training split with unseen samples from external datasets to improve robustness",
+    )
+    parser.add_argument(
         "--output",
         default="docs/metrics.json",
         help="Path to write computed metrics as JSON",
@@ -260,6 +318,7 @@ def main() -> None:
         cv_folds=args.cv_folds,
         real_world_data_path=None if args.skip_external else args.real_world_data,
         adversarial_data_path=None if args.skip_external else args.adversarial_data,
+        augment_train_with_external=args.augment_train_with_external and not args.skip_external,
     )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
