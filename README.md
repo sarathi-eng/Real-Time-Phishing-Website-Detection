@@ -139,6 +139,8 @@ Run evaluation:
 ```bash
 python scripts/evaluate_model.py \
   --data data/dataset.csv \
+  --real-world-data data/real_world_eval.csv \
+  --adversarial-data data/adversarial_eval.csv \
   --test-size 0.2 \
   --random-state 42 \
   --cv-folds 5 \
@@ -151,6 +153,8 @@ Metrics are computed on a **held-out test set (no leakage)**:
 - explicit train/test URL overlap check (`0` required)
 - label-derived feature name guard in evaluation
 - optional 5-fold stratified CV with mean/std reporting
+- external challenge evaluation on unseen **real-world-style** and **adversarial** URL sets
+- difficulty-gap report (`delta_*`) vs held-out split to reflect realistic performance drop
 
 Latest held-out metrics (`docs/metrics.json`):
 
@@ -160,6 +164,26 @@ Latest held-out metrics (`docs/metrics.json`):
 - F1: **1.0000**
 
 > Note: this dataset is small and highly separable, so perfect metrics can still occur even with leakage-safe evaluation.
+
+### Limitations & Realistic Expectations
+
+- The primary training/evaluation dataset (`data/dataset.csv`) is synthetic and easier than live phishing traffic.
+- Held-out metrics are still useful for regression checks, but are **not sufficient** as real-world readiness evidence.
+- External challenge sets improve credibility, but they are curated snapshots and do not fully capture attacker evolution.
+
+### Real-World Evaluation Layer
+
+The project now includes two additional unseen evaluation sets:
+
+- `data/real_world_eval.csv`: real-world-style phishing/benign URL mix
+- `data/adversarial_eval.csv`: obfuscated/adversarial URL patterns (punycode-like, deceptive subdomains, encoded paths)
+
+`scripts/evaluate_model.py` reports:
+- `held_out_test_metrics`
+- `external_challenge_metrics`
+- `difficulty_gap_vs_held_out` (metric deltas from held-out to harder sets)
+
+This makes it explicit when apparent held-out performance does not transfer to harder URL distributions.
 
 ## Testing
 

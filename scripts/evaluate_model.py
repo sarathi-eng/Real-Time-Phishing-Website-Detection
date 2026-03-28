@@ -45,6 +45,25 @@ def _prepare_dataset(data_path: str) -> pd.DataFrame:
     return dataset
 
 
+def _prepare_external_dataset(data_path: str, train_urls: set[str], dataset_name: str) -> tuple[pd.DataFrame, dict]:
+    external = _prepare_dataset(data_path)
+    overlap_mask = external["url"].isin(train_urls)
+    removed_overlap = int(overlap_mask.sum())
+    external = external.loc[~overlap_mask].reset_index(drop=True)
+    if external.empty:
+        raise ValueError(
+            f"External dataset '{dataset_name}' has no unseen URLs after removing overlaps with training set."
+        )
+    if external["label"].nunique() < 2:
+        raise ValueError(f"External dataset '{dataset_name}' must contain both classes after overlap filtering.")
+    return external, {
+        "source_path": data_path,
+        "samples_total_after_filter": int(len(external)),
+        "removed_overlap_with_train": removed_overlap,
+        "class_distribution": {str(k): int(v) for k, v in external["label"].value_counts().to_dict().items()},
+    }
+
+
 def _extract_features(urls: list[str]) -> pd.DataFrame:
     features = feature_assembler.assemble_batch(urls)
     forbidden_columns = {"label", "target", "ground_truth", "is_phishing", "y"}
@@ -92,12 +111,20 @@ def _cross_validate(features: pd.DataFrame, labels: pd.Series, random_state: int
     }
 
 
+def _evaluate_external_set(model: PhishingModel, dataset: pd.DataFrame) -> dict:
+    external_features = _extract_features(dataset["url"].tolist())
+    external_pred = model.predict(external_features)
+    return _compute_metrics(dataset["label"], external_pred)
+
+
 def evaluate(
     data_path: str,
     test_size: float = 0.2,
     random_state: int = 42,
     cross_validate: bool = True,
     cv_folds: int = 5,
+    real_world_data_path: str | None = None,
+    adversarial_data_path: str | None = None,
 ) -> dict:
     dataset = _prepare_dataset(data_path)
     features = _extract_features(dataset["url"].tolist())
@@ -150,6 +177,41 @@ def evaluate(
         },
     }
 
+    train_url_set = set(dataset.loc[X_train.index, "url"])
+    challenge_sets: dict[str, dict] = {}
+    challenge_metadata: dict[str, dict] = {}
+
+    if real_world_data_path:
+        real_world_dataset, meta = _prepare_external_dataset(
+            data_path=real_world_data_path,
+            train_urls=train_url_set,
+            dataset_name="real_world",
+        )
+        challenge_sets["real_world_style_metrics"] = _evaluate_external_set(model, real_world_dataset)
+        challenge_metadata["real_world"] = meta
+
+    if adversarial_data_path:
+        adversarial_dataset, meta = _prepare_external_dataset(
+            data_path=adversarial_data_path,
+            train_urls=train_url_set,
+            dataset_name="adversarial",
+        )
+        challenge_sets["adversarial_metrics"] = _evaluate_external_set(model, adversarial_dataset)
+        challenge_metadata["adversarial"] = meta
+
+    if challenge_sets:
+        report["external_challenge_metrics"] = challenge_sets
+        report["external_challenge_metadata"] = challenge_metadata
+        report["difficulty_gap_vs_held_out"] = {
+            name: {
+                "delta_accuracy": round(challenge["accuracy"] - metrics["accuracy"], 4),
+                "delta_precision": round(challenge["precision"] - metrics["precision"], 4),
+                "delta_recall": round(challenge["recall"] - metrics["recall"], 4),
+                "delta_f1": round(challenge["f1"] - metrics["f1"], 4),
+            }
+            for name, challenge in challenge_sets.items()
+        }
+
     if cross_validate:
         report["cross_validation"] = _cross_validate(
             features=features,
@@ -169,6 +231,21 @@ def main() -> None:
     parser.add_argument("--no-cross-validate", action="store_true", help="Disable 5-fold cross-validation")
     parser.add_argument("--cv-folds", type=int, default=5, help="Number of CV folds when enabled")
     parser.add_argument(
+        "--real-world-data",
+        default="data/real_world_eval.csv",
+        help="CSV path for unseen real-world style evaluation URLs",
+    )
+    parser.add_argument(
+        "--adversarial-data",
+        default="data/adversarial_eval.csv",
+        help="CSV path for adversarial evaluation URLs",
+    )
+    parser.add_argument(
+        "--skip-external",
+        action="store_true",
+        help="Skip external real-world/adversarial evaluation layers",
+    )
+    parser.add_argument(
         "--output",
         default="docs/metrics.json",
         help="Path to write computed metrics as JSON",
@@ -181,6 +258,8 @@ def main() -> None:
         random_state=args.random_state,
         cross_validate=not args.no_cross_validate,
         cv_folds=args.cv_folds,
+        real_world_data_path=None if args.skip_external else args.real_world_data,
+        adversarial_data_path=None if args.skip_external else args.adversarial_data,
     )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
