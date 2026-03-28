@@ -43,6 +43,66 @@
     "conflicting_duplicate_labels_blocked": true,
     "label_derived_features_blocked": true
   },
+  "external_challenge_metrics": {
+    "real_world_style_metrics": {
+      "accuracy": 0.5,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6667,
+      "confusion_matrix": {
+        "tn": 0,
+        "fp": 10,
+        "fn": 0,
+        "tp": 10
+      }
+    },
+    "adversarial_metrics": {
+      "accuracy": 0.6,
+      "precision": 0.5625,
+      "recall": 0.9,
+      "f1": 0.6923,
+      "confusion_matrix": {
+        "tn": 3,
+        "fp": 7,
+        "fn": 1,
+        "tp": 9
+      }
+    }
+  },
+  "external_challenge_metadata": {
+    "real_world": {
+      "source_path": "data/real_world_eval.csv",
+      "samples_total_after_filter": 20,
+      "removed_overlap_with_train": 0,
+      "class_distribution": {
+        "1": 10,
+        "0": 10
+      }
+    },
+    "adversarial": {
+      "source_path": "data/adversarial_eval.csv",
+      "samples_total_after_filter": 20,
+      "removed_overlap_with_train": 0,
+      "class_distribution": {
+        "1": 10,
+        "0": 10
+      }
+    }
+  },
+  "difficulty_gap_vs_held_out": {
+    "real_world_style_metrics": {
+      "delta_accuracy": -0.5,
+      "delta_precision": -0.5,
+      "delta_recall": 0.0,
+      "delta_f1": -0.3333
+    },
+    "adversarial_metrics": {
+      "delta_accuracy": -0.4,
+      "delta_precision": -0.4375,
+      "delta_recall": -0.1,
+      "delta_f1": -0.3077
+    }
+  },
   "cross_validation": {
     "folds": 5,
     "mean": {
