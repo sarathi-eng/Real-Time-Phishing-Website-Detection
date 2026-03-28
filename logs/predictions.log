@@ -12,3 +12,43 @@ Connection Error while fetching https://secure-login-paypal.com.account-update.t
 [2026-03-28 03:29:01] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 0.99
 [2026-03-28 03:35:36] URL: https://paypa1-update.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.55
 [2026-03-28 03:39:11] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 1.00
+[2026-03-28 13:13:05] URL: https://paypa1-update.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.55
+[2026-03-28 08:13:34] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 1.00
+Aggressive Timeout (>1.5s) triggered for https://secure-login-paypal.com.account-update.top
+[2026-03-28 08:14:16] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 0.88
+[2026-03-28 08:27:17] URL: https://google.com | Prediction: SAFE (Green) | Confidence: 0.00
+HTTP Request: GET https://google.com "HTTP/1.1 301 Moved Permanently"
+HTTP Request: GET https://www.google.com/ "HTTP/1.1 200 OK"
+[2026-03-28 08:30:47] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 1.00
+Connection Error while fetching https://secure-login-paypal.com.account-update.top
+[2026-03-28 08:31:19] URL: https://google.com | Prediction: SAFE (Green) | Confidence: 0.12
+[2026-03-28 08:31:28] URL: https://faceb00k.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.40
+[2026-03-28 08:31:46] URL: https://secure-login-paypal.com.account-update.top | Prediction: PHISHING (Red) | Confidence: 0.88
+[2026-03-28 08:37:56] URL: https://google.com | Prediction: SAFE (Green) | Confidence: 0.12
+[2026-03-28 08:38:12] URL: https://faceb00k.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.40
+[2026-03-28 14:14:30] URL: https://xn--gogle-1ta.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.41
+[2026-03-28 08:51:01] URL: https://google.com | Prediction: SAFE (Green) | Confidence: 0.00
+HTTP Request: GET https://google.com "HTTP/1.1 301 Moved Permanently"
+HTTP Request: GET https://www.google.com/ "HTTP/1.1 200 OK"
+[2026-03-28 08:51:11] URL: https://faceb00k.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.41
+[2026-03-28 08:59:37] URL: https://faceb00k.com | Prediction: PHISHING (Red) | Confidence: 0.99
+HTTP Request: GET https://faceb00k.com "HTTP/1.1 302 Found"
+Connection Error while fetching https://faceb00k.com
+[2026-03-28 09:04:02] URL: https://google.com | Prediction: SAFE (Green) | Confidence: 0.00
+HTTP Request: GET https://google.com "HTTP/1.1 301 Moved Permanently"
+HTTP Request: GET https://www.google.com/ "HTTP/1.1 200 OK"
+[2026-03-28 09:04:10] URL: https://faceb00k.com | Prediction: PHISHING (Red) | Confidence: 0.99
+HTTP Request: GET https://faceb00k.com "HTTP/1.1 200 OK"
+[2026-03-28 09:05:39] URL: https://www.microsoft.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.41
+[2026-03-28 09:05:57] URL: https://accounts-google-security-check.com | Prediction: PHISHING (Red) | Confidence: 1.00
+Connection Error while fetching https://accounts-google-security-check.com
+HTTP Request: GET https://www.microsoft.com "HTTP/1.1 200 OK"
+[2026-03-28 09:10:21] URL: https://www.microsoft.com | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.41
+[2026-03-28 09:17:25] URL: https://www.microsoft.com | Prediction: SAFE (Green) | Confidence: 0.01
+HTTP Request: GET https://www.microsoft.com "HTTP/1.1 200 OK"
+[2026-03-28 13:30:20] URL: https://example.com | Prediction: SAFE (Green) | Confidence: 0.00
+Aggressive Timeout (>1.5s) triggered for https://example.com
+[2026-03-28 13:31:28] URL: https://paypal-secure-login-update.com/auth | Prediction: PHISHING (Red) | Confidence: 1.00
+Connection Error while fetching https://paypal-secure-login-update.com/auth
+Connection Error while fetching http://not-a-url
+[2026-03-28 13:32:09] URL: not-a-url | Prediction: SUSPICIOUS (Yellow) | Confidence: 0.49
