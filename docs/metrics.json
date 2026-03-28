@@ -36,34 +36,41 @@
     "random_state": 42,
     "samples_total": 100,
     "samples_train": 80,
-    "samples_test": 20
+    "samples_test": 20,
+    "samples_train_effective": 100
   },
   "leakage_guards": {
     "dropped_duplicate_urls": true,
     "conflicting_duplicate_labels_blocked": true,
     "label_derived_features_blocked": true
   },
+  "training_augmentation": {
+    "enabled": true,
+    "source_path": "data/hard_train_aug.csv",
+    "added_samples": 20,
+    "removed_overlap_with_train": 0
+  },
   "external_challenge_metrics": {
     "real_world_style_metrics": {
-      "accuracy": 0.5,
-      "precision": 0.5,
+      "accuracy": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "f1": 0.6667,
+      "f1": 1.0,
       "confusion_matrix": {
-        "tn": 0,
-        "fp": 10,
+        "tn": 10,
+        "fp": 0,
         "fn": 0,
         "tp": 10
       }
     },
     "adversarial_metrics": {
-      "accuracy": 0.6,
-      "precision": 0.5625,
+      "accuracy": 0.9,
+      "precision": 0.9,
       "recall": 0.9,
-      "f1": 0.6923,
+      "f1": 0.9,
       "confusion_matrix": {
-        "tn": 3,
-        "fp": 7,
+        "tn": 9,
+        "fp": 1,
         "fn": 1,
         "tp": 9
       }
@@ -91,16 +98,16 @@
   },
   "difficulty_gap_vs_held_out": {
     "real_world_style_metrics": {
-      "delta_accuracy": -0.5,
-      "delta_precision": -0.5,
+      "delta_accuracy": 0.0,
+      "delta_precision": 0.0,
       "delta_recall": 0.0,
-      "delta_f1": -0.3333
+      "delta_f1": 0.0
     },
     "adversarial_metrics": {
-      "delta_accuracy": -0.4,
-      "delta_precision": -0.4375,
+      "delta_accuracy": -0.1,
+      "delta_precision": -0.1,
       "delta_recall": -0.1,
-      "delta_f1": -0.3077
+      "delta_f1": -0.1
     }
   },
   "cross_validation": {

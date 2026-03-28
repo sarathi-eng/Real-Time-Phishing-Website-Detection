@@ -142,6 +142,7 @@ python scripts/evaluate_model.py \
   --real-world-data data/real_world_eval.csv \
   --adversarial-data data/adversarial_eval.csv \
   --augment-train-with-external \
+  --augment-data data/hard_train_aug.csv \
   --test-size 0.2 \
   --random-state 42 \
   --cv-folds 5 \
@@ -203,7 +204,7 @@ The model architecture remains unchanged (RandomForest + calibration + hybrid de
   - higher heuristic blend weight in uncertain cases
   - composite lexical-risk guard to reduce phishing false negatives
 - **Evaluation/training loop**
-  - optional train-time augmentation from external harder sets (while preserving held-out split integrity)
+  - optional train-time augmentation from a separate harder dataset (`data/hard_train_aug.csv`) while keeping benchmark sets unseen
 
 ## Testing
 

@@ -68,40 +68,30 @@ def _augment_training_set(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     train_urls: set[str],
-    real_world_data_path: str | None,
-    adversarial_data_path: str | None,
+    augment_data_path: str | None,
 ) -> tuple[pd.DataFrame, pd.Series, dict]:
-    sources: list[tuple[str, str]] = []
-    if real_world_data_path:
-        sources.append(("real_world", real_world_data_path))
-    if adversarial_data_path:
-        sources.append(("adversarial", adversarial_data_path))
-
-    if not sources:
+    if not augment_data_path:
         return X_train, y_train, {"enabled": False}
 
-    frames = []
-    labels = []
-    added_samples = 0
-    source_stats = {}
-    for name, source_path in sources:
-        external = _prepare_dataset(source_path)
-        unseen = external.loc[~external["url"].isin(train_urls)].reset_index(drop=True)
-        if unseen.empty:
-            source_stats[name] = {"added_samples": 0}
-            continue
-        source_stats[name] = {"added_samples": int(len(unseen))}
-        ext_features = _extract_features(unseen["url"].tolist())
-        frames.append(ext_features)
-        labels.append(unseen["label"])
-        added_samples += len(unseen)
+    augment_dataset = _prepare_dataset(augment_data_path)
+    unseen = augment_dataset.loc[~augment_dataset["url"].isin(train_urls)].reset_index(drop=True)
+    if unseen.empty:
+        return X_train, y_train, {
+            "enabled": True,
+            "source_path": augment_data_path,
+            "added_samples": 0,
+            "removed_overlap_with_train": int(len(augment_dataset)),
+        }
 
-    if not frames:
-        return X_train, y_train, {"enabled": True, "added_samples": 0, "sources": source_stats}
-
-    X_aug = pd.concat([X_train] + frames, ignore_index=True)
-    y_aug = pd.concat([y_train.reset_index(drop=True)] + [lbl.reset_index(drop=True) for lbl in labels], ignore_index=True)
-    return X_aug, y_aug, {"enabled": True, "added_samples": int(added_samples), "sources": source_stats}
+    ext_features = _extract_features(unseen["url"].tolist())
+    X_aug = pd.concat([X_train, ext_features], ignore_index=True)
+    y_aug = pd.concat([y_train.reset_index(drop=True), unseen["label"].reset_index(drop=True)], ignore_index=True)
+    return X_aug, y_aug, {
+        "enabled": True,
+        "source_path": augment_data_path,
+        "added_samples": int(len(unseen)),
+        "removed_overlap_with_train": int(len(augment_dataset) - len(unseen)),
+    }
 
 
 def _extract_features(urls: list[str]) -> pd.DataFrame:
@@ -166,6 +156,7 @@ def evaluate(
     real_world_data_path: str | None = None,
     adversarial_data_path: str | None = None,
     augment_train_with_external: bool = False,
+    augment_data_path: str | None = None,
 ) -> dict:
     dataset = _prepare_dataset(data_path)
     features = _extract_features(dataset["url"].tolist())
@@ -193,8 +184,7 @@ def evaluate(
             X_train=X_train,
             y_train=y_train,
             train_urls=train_urls,
-            real_world_data_path=real_world_data_path,
-            adversarial_data_path=adversarial_data_path,
+            augment_data_path=augment_data_path,
         )
     model.train(train_features, train_labels)
     predictions = model.predict(X_test)
@@ -301,7 +291,12 @@ def main() -> None:
     parser.add_argument(
         "--augment-train-with-external",
         action="store_true",
-        help="Augment training split with unseen samples from external datasets to improve robustness",
+        help="Augment training split with samples from --augment-data",
+    )
+    parser.add_argument(
+        "--augment-data",
+        default="data/hard_train_aug.csv",
+        help="Harder training-only augmentation dataset (kept separate from benchmark evaluation sets)",
     )
     parser.add_argument(
         "--output",
@@ -319,6 +314,7 @@ def main() -> None:
         real_world_data_path=None if args.skip_external else args.real_world_data,
         adversarial_data_path=None if args.skip_external else args.adversarial_data,
         augment_train_with_external=args.augment_train_with_external and not args.skip_external,
+        augment_data_path=args.augment_data,
     )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
