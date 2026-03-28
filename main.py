@@ -2,21 +2,25 @@ import argparse
 import asyncio
 import time
 import os
+import json
+import uuid
+import logging
 import pandas as pd
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import uvicorn
 from dotenv import load_dotenv
 
 # V1 Advanced Security Imports
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
@@ -36,6 +40,41 @@ from src.utils import log_prediction
 # Pydantic schemas
 class PredictRequest(BaseModel):
     url: str
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("URL is required.")
+        if not normalized.startswith(("http://", "https://")):
+            normalized = f"http://{normalized}"
+        from urllib.parse import urlparse
+        parsed = urlparse(normalized)
+        if not parsed.hostname:
+            raise ValueError("Invalid URL format.")
+        return normalized
+
+
+def success_response(data: Any, request_id: Optional[str] = None) -> dict:
+    return {
+        "status": "success",
+        "data": data,
+        "meta": {"request_id": request_id} if request_id else {}
+    }
+
+
+def error_response(code: str, message: str, details: Any = None, request_id: Optional[str] = None) -> dict:
+    response = {
+        "status": "error",
+        "error": {
+            "code": code,
+            "message": message,
+            "details": details
+        },
+        "meta": {"request_id": request_id} if request_id else {}
+    }
+    return response
 
 # -----------------------------------------------------
 # CORE HYBRID ENGINE (Intact from V0)
@@ -231,6 +270,11 @@ hybrid_decision = HybridDecision()
 # FASTAPI V1 DEPLOYMENT SETUP (UI, LIMITERS, HEALTH)
 # -----------------------------------------------------
 from starlette.middleware.base import BaseHTTPMiddleware
+logger = logging.getLogger("phishing_api")
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
 
 class ForceJsonContentTypeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -244,6 +288,30 @@ class ForceJsonContentTypeMiddleware(BaseHTTPMiddleware):
                 request.scope["headers"] = [(k, v) for k, v in headers.items()]
         return await call_next(request)
 
+class RequestContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+        request.state.request_id = request_id
+        start = time.time()
+        logger.info(json.dumps({
+            "event": "request.start",
+            "path": request.url.path,
+            "method": request.method,
+            "request_id": request_id
+        }))
+        response = await call_next(request)
+        duration_ms = round((time.time() - start) * 1000, 2)
+        response.headers["X-Request-ID"] = request_id
+        logger.info(json.dumps({
+            "event": "request.end",
+            "path": request.url.path,
+            "method": request.method,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+            "request_id": request_id
+        }))
+        return response
+
 from fastapi.middleware.cors import CORSMiddleware
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Real-Time Phishing Detection System V1")
@@ -255,10 +323,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(ForceJsonContentTypeMiddleware)
+app.add_middleware(RequestContextMiddleware)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-import json
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content=error_response(
+            code="RATE_LIMIT_EXCEEDED",
+            message="Too many requests. Please retry later.",
+            details={"limit": str(exc.detail)},
+            request_id=getattr(request.state, "request_id", None)
+        )
+    )
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
@@ -272,14 +352,51 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             data = json.loads(body.decode('utf-8'))
             if "url" in data:
                 bg_tasks = BackgroundTasks()
-                result = await hybrid_decision.predict_with_fast_path(data["url"], bg_tasks)
-                return JSONResponse(status_code=200, content=result, background=bg_tasks)
+                payload = PredictRequest(url=data["url"])
+                result = await hybrid_decision.predict_with_fast_path(payload.url, bg_tasks)
+                return JSONResponse(
+                    status_code=200,
+                    content=success_response(result, getattr(request.state, "request_id", None)),
+                    background=bg_tasks
+                )
     except Exception:
         pass
-        
+
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content=error_response(
+            code="VALIDATION_ERROR",
+            message="Invalid request payload.",
+            details=jsonable_encoder(exc.errors()),
+            request_id=getattr(request.state, "request_id", None)
+        )
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(
+            code="HTTP_ERROR",
+            message=str(exc.detail),
+            details=None,
+            request_id=getattr(request.state, "request_id", None)
+        )
+    )
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.exception("unhandled_exception", extra={"request_id": getattr(request.state, "request_id", None)})
+    return JSONResponse(
+        status_code=500,
+        content=error_response(
+            code="INTERNAL_SERVER_ERROR",
+            message="An unexpected server error occurred.",
+            details=None,
+            request_id=getattr(request.state, "request_id", None)
+        )
     )
 
 os.makedirs("static", exist_ok=True)
@@ -290,7 +407,8 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/health")
 async def health_check():
     """Liveness probe for Kubernetes & Docker orchestration."""
-    return {"status": "healthy", "service": "Phishing-Detector-V1", "timestamp": time.time()}
+    payload = {"service_status": "healthy", "service": "Phishing-Detector-V1", "timestamp": time.time()}
+    return success_response(payload)
 
 @app.get("/", response_class=HTMLResponse)
 @limiter.limit(os.getenv("RATE_LIMIT", "60/minute"))
@@ -302,29 +420,53 @@ async def serve_ui(request: Request):
 @limiter.limit(os.getenv("RATE_LIMIT", "60/minute"))
 async def predict_endpoint(request: Request, payload: PredictRequest, background_tasks: BackgroundTasks):
     """JSON ML Inference Endpoint restricted by SlowAPI logic."""
-    if not payload.url:
-        raise HTTPException(status_code=400, detail="URL is required.")
-    return await hybrid_decision.predict_with_fast_path(payload.url, background_tasks)
+    result = await hybrid_decision.predict_with_fast_path(payload.url, background_tasks)
+    return success_response(result, getattr(request.state, "request_id", None))
 
 
 # -----------------------------------------------------
 # CLI EXECUTORS
 # -----------------------------------------------------
 def train_pipeline(data_path: str):
+    """Train a phishing model and print core evaluation metrics."""
     print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
-    X = feature_assembler.assemble_batch(df['url'])
+    if "url" not in df.columns or "label" not in df.columns:
+        raise ValueError("Training dataset must contain 'url' and 'label' columns.")
+    df = df[["url", "label"]].copy()
+    df["url"] = df["url"].astype(str).str.strip()
+    df["label"] = df["label"].astype(int)
+    df = df[(df["url"] != "") & (df["label"].isin([0, 1]))]
+    conflict_labels = df.groupby("url")["label"].nunique()
+    if (conflict_labels > 1).any():
+        raise ValueError("Training data contains duplicated URLs with conflicting labels.")
+    df = df.drop_duplicates(subset=["url"], keep="first").reset_index(drop=True)
+
+    X = feature_assembler.assemble_batch(df['url'].tolist())
     y = df['label']
     
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
+    )
+    train_urls, test_urls = set(df.loc[X_train.index, "url"]), set(df.loc[X_test.index, "url"])
+    overlap = train_urls.intersection(test_urls)
+    if overlap:
+        raise RuntimeError("Leakage detected: overlapping URLs in train and test splits.")
     
     from src.model import PhishingModel
     model = PhishingModel()
     model.train(X_train, y_train)
     y_pred = model.predict(X_test)
     print("\n--- Test Set ---")
+    print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
+    print(f"Precision: {precision_score(y_test, y_pred, zero_division=0):.4f}")
+    print(f"Recall: {recall_score(y_test, y_pred, zero_division=0):.4f}")
     print(f"F1-Score: {f1_score(y_test, y_pred):.4f}")
     model.save('models/model.pkl')
 

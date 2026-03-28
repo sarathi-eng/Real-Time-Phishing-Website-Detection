@@ -42,9 +42,11 @@ class FeatureAssembler:
         # Normalizes levenshtein distance threat. (1.0 = highly likely typosquatting)
         features['levenshtein_distance_feature'] = 1.0 if typo_features.get('red_flag_override') else 0.0
         features['is_punycode_abuse'] = 1.0 if typo_features.get('is_punycode') else 0.0
+        features['visual_similarity_score'] = float(typo_features.get('visual_similarity_score', 0.0))
+        features['contains_homoglyph'] = 1.0 if typo_features.get('contains_homoglyph') else 0.0
         
         # 5. Suspicious Content Density
-        features['suspicious_content_density'] = context_features.get('suspicious_keyword_context', 0.0)
+        features['suspicious_content_density'] = context_features.get('suspicious_keyword_weighted_score', 0.0)
         
         return features
 

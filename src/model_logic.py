@@ -28,8 +28,8 @@ class HybridDecisionEngine:
                 final_confidence = ml_raw_score * (heuristic_signal + 0.1)
             else:
                 # Standard Soft-Voting Equilibrium
-                ml_weight = 0.70
-                heuristic_weight = 0.30
+                ml_weight = 0.65
+                heuristic_weight = 0.35
                 final_confidence = (ml_raw_score * ml_weight) + (heuristic_signal * heuristic_weight)
 
             # Cap statistical bounds
@@ -43,18 +43,31 @@ class HybridDecisionEngine:
         if 'levenshtein_distance_feature' in feature_df.columns and 'is_trusted_brand_score' in feature_df.columns:
             typo_signal = float(feature_df['levenshtein_distance_feature'].iloc[0])
             puny_signal = float(feature_df.get('is_punycode_abuse', [0.0])[0])
+            visual_similarity = float(feature_df.get('visual_similarity_score', [0.0])[0])
+            contains_homoglyph = float(feature_df.get('contains_homoglyph', [0.0])[0])
             is_safelisted_base = float(feature_df.get('is_safelisted_base', [0.0])[0])
             suspicious_kw = float(feature_df.get('suspicious_keyword_context', [0.0])[0])
+            suspicious_kw_weighted = float(feature_df.get('suspicious_keyword_weighted_score', [0.0])[0])
+            suspicious_tld = float(feature_df.get('suspicious_tld', [0.0])[0])
             
             # An authoritative domain fundamentally cannot be a typosquat of itself.
             # We nullify the mathematical fuzzy-matching False Positive collision.
             if is_safelisted_base == 1.0:
                 typo_signal = 0.0
+                visual_similarity = 0.0
+                contains_homoglyph = 0.0
                 
             # PRIORITY 1: HARD ATTACK OVERRIDE -> PHISHING
-            if (typo_signal >= 0.8 or puny_signal >= 0.8) and is_safelisted_base == 0.0:
+            if (typo_signal >= 0.8 or puny_signal >= 0.8 or visual_similarity >= 0.85) and is_safelisted_base == 0.0:
                 final_confidence = max(final_confidence, 0.99)
                 hard_override_reason = "Typosquatting detected: high similarity to trusted brand (Hard Override)."
+            elif (
+                is_safelisted_base == 0.0
+                and (contains_homoglyph >= 1.0 or suspicious_tld >= 1.0)
+                and (suspicious_kw_weighted >= 0.5 or visual_similarity >= 0.7)
+            ):
+                final_confidence = max(final_confidence, 0.90)
+                hard_override_reason = "Composite lexical risk detected (homoglyph/TLD + phishing context)."
                 
             # PRIORITY 2: SAFELIST PROTECTION -> SAFE
             elif is_safelisted_base == 1.0 and suspicious_kw < 0.8:
@@ -63,6 +76,17 @@ class HybridDecisionEngine:
                 if heuristic_val < 0.85:
                     final_confidence = min(final_confidence, 0.01)
                     hard_override_reason = "Trusted domain (safelisted) — no attack indicators found."
+            
+            # PRIORITY 2.5: False-negative guard for medium-confidence malicious lexical bundles.
+            elif is_safelisted_base == 0.0 and final_confidence < 0.70:
+                lexical_risk = max(
+                    suspicious_kw_weighted,
+                    visual_similarity,
+                    0.8 if suspicious_tld >= 1.0 else 0.0,
+                )
+                if lexical_risk >= 0.7:
+                    final_confidence = max(final_confidence, 0.78)
+                    hard_override_reason = "Elevated by lexical risk guard (reduce false negatives)."
                     
             # PRIORITY 3: ML PREDICTION (Fallback defaults automatically if gates 1 & 2 fail)
             

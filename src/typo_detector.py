@@ -1,5 +1,4 @@
 import unicodedata
-import re
 from urllib.parse import urlparse
 from src.brands_db import TARGETED_BRANDS, OFFICIAL_DOMAINS
 
@@ -30,6 +29,17 @@ def damerau_levenshtein(s1: str, s2: str) -> int:
 
 # 2. Defensive High-Risk Affixes Engine
 HIGH_RISK_AFFIXES = ["login", "secure", "account", "update", "support", "auth", "verify", "service", "billing"]
+HOMOGLYPH_MAP = {
+    "0": "o",
+    "1": "l",
+    "3": "e",
+    "4": "a",
+    "5": "s",
+    "7": "t",
+    "@": "a",
+    "$": "s",
+    "!": "i",
+}
 
 class TyposquattingDetector:
     def __init__(self):
@@ -39,7 +49,17 @@ class TyposquattingDetector:
     def _skeletonize(self, text: str) -> str:
         """3. Unicode Homoglyph Normalization using NFKD and ASCII mapping."""
         # This instantly crushes visual confusables (Cyrillic a -> Latin a).
-        return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        normalized = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        mapped = "".join(HOMOGLYPH_MAP.get(ch, ch) for ch in normalized.lower())
+        return mapped
+
+    @staticmethod
+    def _normalized_similarity(part: str, brand: str) -> float:
+        max_len = max(len(part), len(brand))
+        if max_len == 0:
+            return 0.0
+        dist = damerau_levenshtein(part, brand)
+        return max(0.0, 1.0 - (dist / max_len))
 
     def analyze_domain(self, url: str) -> dict:
         """
@@ -56,6 +76,7 @@ class TyposquattingDetector:
             "is_punycode": False,
             "contains_homoglyph": False,
             "closest_brand_distance": 999,
+            "visual_similarity_score": 0.0,
             "closest_brand": None,
             "exact_brand_substring": False,
             "is_official_domain": hostname in self.official_domains,
@@ -83,6 +104,7 @@ class TyposquattingDetector:
             
         parts = skeletonized_host.split('.')
         best_dist = 999
+        best_similarity = 0.0
         matched_brand = None
         
         # Typosquatting Core Vector Engine
@@ -110,6 +132,8 @@ class TyposquattingDetector:
                 # Only compute the heavy DP matrix if length constraints physically permit it
                 if abs(len(part) - len(brand)) <= max_edits_allowed:
                     dist = damerau_levenshtein(part, brand)
+                    sim = self._normalized_similarity(part, brand)
+                    best_similarity = max(best_similarity, sim)
                     if dist < best_dist:
                         best_dist = dist
                     
@@ -122,8 +146,15 @@ class TyposquattingDetector:
                         reason = f"Damerau-Levenshtein transposition/edit ({dist}) against '{brand}'."
                         if reason not in features["typo_reasons"]:
                             features["typo_reasons"].append(reason)
+                    elif sim >= 0.72 and hostname not in self.official_domains:
+                        features["red_flag_override"] = True
+                        matched_brand = brand
+                        reason = f"High visual similarity ({sim:.2f}) to '{brand}'."
+                        if reason not in features["typo_reasons"]:
+                            features["typo_reasons"].append(reason)
 
         features["closest_brand_distance"] = best_dist
+        features["visual_similarity_score"] = round(best_similarity, 4)
         if matched_brand:
             features["closest_brand"] = matched_brand
             
