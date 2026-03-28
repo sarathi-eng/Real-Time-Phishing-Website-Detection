@@ -1,5 +1,32 @@
-venv/
+# Python
 __pycache__/
-logs/
-.env
+*.py[cod]
+*.pyo
+*.pyd
+*.so
 .pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment and secrets
+.env
+.env.*
+
+# Runtime artifacts
+logs/
+models/*.pkl
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
