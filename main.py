@@ -12,6 +12,7 @@ from typing import Optional, Any
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
@@ -19,7 +20,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 # V1 Advanced Security Imports
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
@@ -366,7 +367,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content=error_response(
             code="VALIDATION_ERROR",
             message="Invalid request payload.",
-            details=exc.errors(),
+            details=jsonable_encoder(exc.errors()),
             request_id=getattr(request.state, "request_id", None)
         )
     )
