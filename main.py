@@ -431,12 +431,33 @@ def train_pipeline(data_path: str):
     """Train a phishing model and print core evaluation metrics."""
     print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
-    X = feature_assembler.assemble_batch(df['url'])
+    if "url" not in df.columns or "label" not in df.columns:
+        raise ValueError("Training dataset must contain 'url' and 'label' columns.")
+    df = df[["url", "label"]].copy()
+    df["url"] = df["url"].astype(str).str.strip()
+    df["label"] = df["label"].astype(int)
+    df = df[(df["url"] != "") & (df["label"].isin([0, 1]))]
+    conflict_labels = df.groupby("url")["label"].nunique()
+    if (conflict_labels > 1).any():
+        raise ValueError("Training data contains duplicated URLs with conflicting labels.")
+    df = df.drop_duplicates(subset=["url"], keep="first").reset_index(drop=True)
+
+    X = feature_assembler.assemble_batch(df['url'].tolist())
     y = df['label']
     
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
+    )
+    train_urls, test_urls = set(df.loc[X_train.index, "url"]), set(df.loc[X_test.index, "url"])
+    overlap = train_urls.intersection(test_urls)
+    if overlap:
+        raise RuntimeError("Leakage detected: overlapping URLs in train and test splits.")
     
     from src.model import PhishingModel
     model = PhishingModel()

@@ -1,8 +1,61 @@
 {
-  "accuracy": 1.0,
-  "precision": 1.0,
-  "recall": 1.0,
-  "f1": 1.0,
-  "samples_total": 100,
-  "samples_test": 20
+  "held_out_test_metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "confusion_matrix": {
+      "tn": 10,
+      "fp": 0,
+      "fn": 0,
+      "tp": 10
+    }
+  },
+  "sanity_checks": {
+    "class_distribution_total": {
+      "0": 50,
+      "1": 50
+    },
+    "class_distribution_train": {
+      "0": 40,
+      "1": 40
+    },
+    "class_distribution_test": {
+      "1": 10,
+      "0": 10
+    },
+    "prediction_distribution_test": {
+      "1": 10,
+      "0": 10
+    },
+    "train_test_overlap_urls": 0
+  },
+  "split": {
+    "strategy": "stratified_train_test_split",
+    "test_size": 0.2,
+    "random_state": 42,
+    "samples_total": 100,
+    "samples_train": 80,
+    "samples_test": 20
+  },
+  "leakage_guards": {
+    "dropped_duplicate_urls": true,
+    "conflicting_duplicate_labels_blocked": true,
+    "label_derived_features_blocked": true
+  },
+  "cross_validation": {
+    "folds": 5,
+    "mean": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "std": {
+      "accuracy": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    }
+  }
 }

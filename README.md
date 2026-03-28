@@ -137,17 +137,29 @@ Validation error response:
 Run evaluation:
 
 ```bash
-python scripts/evaluate_model.py --data data/dataset.csv --output docs/metrics.json
+python scripts/evaluate_model.py \
+  --data data/dataset.csv \
+  --test-size 0.2 \
+  --random-state 42 \
+  --cv-folds 5 \
+  --output docs/metrics.json
 ```
 
-Latest metrics (`docs/metrics.json`):
+Metrics are computed on a **held-out test set (no leakage)**:
+- stratified split (`train_test_split(..., stratify=y)`)
+- duplicate URL removal before splitting
+- explicit train/test URL overlap check (`0` required)
+- label-derived feature name guard in evaluation
+- optional 5-fold stratified CV with mean/std reporting
+
+Latest held-out metrics (`docs/metrics.json`):
 
 - Accuracy: **1.0000**
 - Precision: **1.0000**
 - Recall: **1.0000**
 - F1: **1.0000**
 
-> Note: values depend on train/test split and current dataset contents.
+> Note: this dataset is small and highly separable, so perfect metrics can still occur even with leakage-safe evaluation.
 
 ## Testing
 
